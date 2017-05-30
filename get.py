@@ -23,14 +23,31 @@ class CacheConsumer(object):
         if not os.path.isdir(self.get_cache_path()):
             os.mkdir(self.get_cache_path())
 
+        for i in range(0,16):
+            if not os.path.isdir(os.path.join(self.get_cache_path(), '%x' % i)):
+                os.mkdir(os.path.join(self.get_cache_path(), '%x' % i))
+
+            for j in range(0,16):
+                if not os.path.isdir(os.path.join(self.get_cache_path(), '%x' % i, '%x%x' % (i,j))):
+                    os.mkdir(os.path.join(self.get_cache_path(), '%x' % i, '%x%x' % (i,j)))
+
     def get_cached_filename(self, url):
-        return os.path.join(self.get_cache_path(), hashlib.md5(url).hexdigest())
+        hash = hashlib.md5(url).hexdigest()
+        return os.path.join(self.get_cache_path(), hash[0], hash[0:2], hash)
+
+    def get_cached_filename_compat(self, url):
+        hash = hashlib.md5(url).hexdigest()
+        return os.path.join(self.get_cache_path(), hash[0:2], hash)
 
     def get_file_size(self, url):
         statinfo = os.stat(self.get_cached_filename(url))
         return statinfo.st_size
 
     def is_in_cache(self, url):
+        if os.path.exists(self.get_cached_filename_compat(url)):
+            os.rename(self.get_cached_filename_compat(url), self.get_cached_filename(url))
+            return self.get_file_size(url) > 0
+
         return os.path.exists(self.get_cached_filename(url)) and self.get_file_size(url) > 0
 
     def get_document(self, url):
@@ -109,14 +126,21 @@ class App(CacheConsumer):
         if len(content) < 1:
             return False
 
-        print (etree.tostring(content[0], pretty_print=True, encoding='unicode'))
+        # print (etree.tostring(content[0], pretty_print=True, encoding='unicode'))
 
         for img in content[0].xpath('.//img'):
-            print('\t%s' % img.get('src'))
-            self.process_image(img.get('src'))
+            url = img.get('src')
+
+            if url is None or url.endswith('.ico') or url.endswith('.svg') or url.endswith('.gif'):
+                continue
+
+            print('\t%s' % url)
+            #self.process_image(url)
 
 
     def run(self, argv):
+        posts_count = 0
+
         for year in range(2006, 2018):
             for month in range(1, 13):
                 print('%s/%s' % (month, year))
@@ -130,7 +154,8 @@ class App(CacheConsumer):
                 logger.info('Searching')
 
                 for a_item in html.xpath('//a[@class="j-day-subject-link"]'):
-                    logging.info('PROESSING POST')
+                    posts_count += 1
+                    logging.info('PROCESSING POST %s' % posts_count)
                     logging.info('%s / %s' % (a_item.get('href'), a_item.text_content()))
                     self.process_post(a_item.get('href'))
 
