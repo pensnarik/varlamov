@@ -4,10 +4,12 @@ import os
 import sys
 import logging
 import hashlib
+import shutil
 
 import requests
 from lxml.html import fromstring
 from lxml import etree
+from PIL import Image
 
 logger = logging.getLogger('history')
 
@@ -32,7 +34,7 @@ class CacheConsumer(object):
         return os.path.exists(self.get_cached_filename(url)) and self.get_file_size(url) > 0
 
     def get_document(self, url):
-        logger.info('Get document: %s' % url)
+        logger.info('Getting document: %s' % url)
 
         if self.is_in_cache(url):
             return open(self.get_cached_filename(url)).read()
@@ -50,6 +52,24 @@ class CacheConsumer(object):
             else:
                 raise Exception('Could not get page %s: %s' % (url, result.status_code))
 
+    def get_binary_file(self, url):
+        logger.info('Getting binary file: %s' % url)
+
+        if not self.is_in_cache(url):
+            try:
+                result = requests.get(url, stream=True, timeout=10)
+            except requests.ConnectionError as e:
+                logger.error('Could not get file %s: %s' % (url, str(e)))
+                return None
+
+            if result.status_code == 200:
+                with open(self.get_cached_filename(url), 'wb') as f:
+                    result.raw.decode_content = True
+                    shutil.copyfileobj(result.raw, f)
+            else:
+                return None
+
+        return open(self.get_cached_filename(url)).read()
 
 class App(CacheConsumer):
 
@@ -62,6 +82,20 @@ class App(CacheConsumer):
 
         super(App, self).__init__()
 
+    def process_image(self, url):
+        data = self.get_binary_file(url)
+
+        if data is None:
+            return False
+
+        try:
+            image = Image.open(open(self.get_cached_filename(url)))
+        except IOError:
+            logger.error('Could not read image %s' % url)
+            return False
+
+        logger.info('Image size: %s x %s' % (image.size))
+
     def process_post(self, url):
         page = self.get_document(url)
 
@@ -72,10 +106,14 @@ class App(CacheConsumer):
 
         content = html.xpath('//div[@id="entrytext"]')
 
+        if len(content) < 1:
+            return False
+
         print (etree.tostring(content[0], pretty_print=True, encoding='unicode'))
 
-        for img in content[0].xpath('//img'):
+        for img in content[0].xpath('.//img'):
             print('\t%s' % img.get('src'))
+            self.process_image(img.get('src'))
 
 
     def run(self, argv):
@@ -92,6 +130,7 @@ class App(CacheConsumer):
                 logger.info('Searching')
 
                 for a_item in html.xpath('//a[@class="j-day-subject-link"]'):
+                    logging.info('PROESSING POST')
                     logging.info('%s / %s' % (a_item.get('href'), a_item.text_content()))
                     self.process_post(a_item.get('href'))
 
