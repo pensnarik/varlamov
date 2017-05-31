@@ -1,0 +1,17 @@
+version: '2'
+
+networks:
+  database:
+
+services:
+  database:
+    image: database
+    environment:
+      PG_LOG_MIN_MESSAGES: 'info'
+      PG_LOG_MIN_DURATION_STATEMENT: '0'
+    cpuset: 0,1
+    mem_limit: 512M
+    networks:
+      - database
+    ports:
+      - '20000:5432'
