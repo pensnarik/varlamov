@@ -54,48 +54,56 @@ class CacheConsumer(object):
 
         return os.path.exists(self.get_cached_filename(url)) and self.get_file_size(url) > 0
 
-    def get_document(self, url):
-        logger.info('Getting document: %s' % url)
+    def is_in_cache_error(self, url):
+        return os.path.exists('%s.error' % self.get_cached_filename(url))
+
+    def save_error_in_cache(self, url, error='ERROR'):
+        with open('%s.error' % self.get_cached_filename(url), 'wt') as f:
+            f.write(error)
+
+    def get_file(self, url, stream=False):
+        logger.info('Getting file: %s' % url)
+
+        if self.is_in_cache_error(url):
+            return None
 
         if self.is_in_cache(url):
             return open(self.get_cached_filename(url)).read()
         else:
-            result = requests.get(url)
-
-            if result.status_code == 200:
-                logger.info(result.encoding)
-                f = open(self.get_cached_filename(url), 'w')
-                f.write(result.content)
-                f.close()
-                return result.text
-            elif result.status_code == 404:
-                return None
-            else:
-                raise Exception('Could not get page %s: %s' % (url, result.status_code))
-
-    def get_binary_file(self, url):
-        logger.info('Getting binary file: %s' % url)
-
-        if not self.is_in_cache(url):
             try:
-                result = requests.get(url, stream=True, timeout=10)
+                result = requests.get(url, stream=stream, timeout=10)
             except Exception as e:
                 logger.error('Could not get file %s: %s' % (url, str(e)))
+                self.save_error_in_cache(url, 'DownloadException')
                 return None
 
             if result.status_code == 200:
-                try:
-                    with open(self.get_cached_filename(url), 'wb') as f:
-                        result.raw.decode_content = True
-                        shutil.copyfileobj(result.raw, f)
-                except ReadTimeoutError as e:
-                    logger.error('Exception while reading data: %s' % str(e))
-                    os.remove(self.get_cached_filename(url))
-                    return None
+                if stream == True:
+                    try:
+                        with open(self.get_cached_filename(url), 'wb') as f:
+                            result.raw.decode_content = True
+                            shutil.copyfileobj(result.raw, f)
+                        return open(self.get_cached_filename(url)).read()
+                    except ReadTimeoutError as e:
+                        logger.error('Exception while reading data: %s' % str(e))
+                        os.remove(self.get_cached_filename(url))
+                        self.save_error_in_cache('ReadTimeoutError')
+                        return None
+                else:
+                    logger.info(result.encoding)
+                    f = open(self.get_cached_filename(url), 'w')
+                    f.write(result.content)
+                    f.close()
+                    return result.text
             else:
+                self.save_error_in_cache('InvalidHTTPStatusCode: %s' % result.status_code)
                 return None
 
-        return open(self.get_cached_filename(url)).read()
+    def get_document(self, url):
+        return self.get_file(url, stream=False)
+
+    def get_binary_file(self, url):
+        return self.get_file(url, stream=True)
 
 class App(CacheConsumer):
 
@@ -190,7 +198,7 @@ class App(CacheConsumer):
 
             try:
                 url.decode('ascii')
-            except UnicodeDecodeError:
+            except UnicodeEncodeError:
                 logger.error('Invalid ASCII symbol in URL, skipping')
 
             logger.info(url)
