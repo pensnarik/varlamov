@@ -200,6 +200,7 @@ class App(CacheConsumer):
                 url.decode('ascii')
             except UnicodeEncodeError:
                 logger.error('Invalid ASCII symbol in URL, skipping')
+                continue
 
             logger.info(url)
             self.process_image(post_id, url)
@@ -279,6 +280,12 @@ class App(CacheConsumer):
                 for a_item in html.xpath('//a[@class="j-day-subject-link"]'):
                     posts_count += 1
                     url = a_item.get('href')
+
+                    try:
+                        url.decode('ascii')
+                    except UnicodeEncodeError:
+                        logger.info('Non ASCII symbol in URL, skipping...')
+                        continue
 
                     logging.info('PROCESSING POST %s' % posts_count)
                     logging.info('%s / %s' % (url, a_item.text_content()))
