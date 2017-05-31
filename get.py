@@ -5,11 +5,15 @@ import sys
 import logging
 import hashlib
 import shutil
+import psycopg2
 
 import requests
 from lxml.html import fromstring
 from lxml import etree
 from PIL import Image
+from PIL.ExifTags import TAGS
+from requests.packages.urllib3.exceptions import ReadTimeoutError
+import exifread
 
 logger = logging.getLogger('history')
 
@@ -75,14 +79,19 @@ class CacheConsumer(object):
         if not self.is_in_cache(url):
             try:
                 result = requests.get(url, stream=True, timeout=10)
-            except requests.ConnectionError as e:
+            except Exception as e:
                 logger.error('Could not get file %s: %s' % (url, str(e)))
                 return None
 
             if result.status_code == 200:
-                with open(self.get_cached_filename(url), 'wb') as f:
-                    result.raw.decode_content = True
-                    shutil.copyfileobj(result.raw, f)
+                try:
+                    with open(self.get_cached_filename(url), 'wb') as f:
+                        result.raw.decode_content = True
+                        shutil.copyfileobj(result.raw, f)
+                except ReadTimeoutError as e:
+                    logger.error('Exception while reading data: %s' % str(e))
+                    os.remove(self.get_cached_filename(url))
+                    return None
             else:
                 return None
 
@@ -99,22 +108,53 @@ class App(CacheConsumer):
 
         super(App, self).__init__()
 
-    def process_image(self, url):
+        self.conn = psycopg2.connect('postgresql://postgres@127.0.0.1:20000/database')
+        self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+
+    def process_image(self, post_id, url):
+        def extract_tag(tags, tag_name):
+            if tags.get(tag_name) is None:
+                return None
+            return str(tags.get(tag_name))
+
         data = self.get_binary_file(url)
 
         if data is None:
             return False
 
+        fp = open(self.get_cached_filename(url), 'rb')
+
         try:
-            image = Image.open(open(self.get_cached_filename(url)))
+            image = Image.open(fp)
         except IOError:
             logger.error('Could not read image %s' % url)
             return False
 
         logger.info('Image size: %s x %s' % (image.size))
 
-    def process_post(self, url):
-        page = self.get_document(url)
+        fp.seek(0)
+        try:
+            tags = exifread.process_file(fp)
+        except UnicodeEncodeError:
+            logger.error('Could not extract EXIF tags: UnicodeEncodeError')
+            tags = {}
+
+        logger.info('%s: %s' % (self.get_cached_filename(url),tags.keys()))
+        logger.info('%s' % tags.get('EXIF FocalLength'))
+        logger.info('%s' % tags.get('EXIF ExposureTime'))
+        logger.info('%s' % tags.get('EXIF DateTimeOriginal'))
+
+        self.save_image({'post_id': post_id, 'url': url,
+                         'width': image.size[0], 'height': image.size[1],
+                         'exif_camera_model': extract_tag(tags, 'Image Model'),
+                         'exif_focal_length': extract_tag(tags, 'EXIF FocalLength'),
+                         'exif_exposure_time': extract_tag(tags, 'EXIF ExposureTime'),
+                         'exif_date_time': extract_tag(tags, 'EXIF DateTimeOriginal'),
+                         'exif_aperture_value': extract_tag(tags, 'EXIF ApertureValue'),
+                         'exif_iso': extract_tag(tags, 'EXIF ISOSpeedRatings')})
+
+    def process_post(self, post):
+        page = self.get_document(post['url'])
 
         if page is None:
             return False
@@ -128,14 +168,89 @@ class App(CacheConsumer):
 
         # print (etree.tostring(content[0], pretty_print=True, encoding='unicode'))
 
+        date_published = html.xpath('//time[@itemprop="datePublished"]')
+
+        if len(date_published) > 0:
+            post['date_published'] = date_published[0].text_content()
+        else:
+            raise Exception('Could not find datePublished time tag')
+
+        date_modified = html.xpath('//time[@itemprop="dateModified"]')
+
+        if len(date_modified) > 0:
+            post['date_modified'] = date_modified[0].text_content()
+
+        post_id = self.save_post(post)
+
         for img in content[0].xpath('.//img'):
             url = img.get('src')
 
             if url is None or url.endswith('.ico') or url.endswith('.svg') or url.endswith('.gif'):
                 continue
 
-            print('\t%s' % url)
-            #self.process_image(url)
+            try:
+                url.decode('ascii')
+            except UnicodeDecodeError:
+                logger.error('Invalid ASCII symbol in URL, skipping')
+
+            logger.info(url)
+            self.process_image(post_id, url)
+
+    def save_post(self, post):
+        cursor = self.conn.cursor()
+
+        query_check = '''
+        select id from public.post where url = %(url)s
+        '''
+
+        query_insert = '''
+        insert into public.post (url, title, date_published, date_modified)
+        values (%(url)s, %(title)s, %(date_published)s, %(date_modified)s)
+        returning id
+        '''
+
+        cursor.execute(query_check, post)
+        result = cursor.fetchone()
+
+        if result is None:
+            cursor.execute(query_insert, post)
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0]
+        else:
+            cursor.close()
+            return result[0]
+
+    def save_image(self, image):
+        cursor = self.conn.cursor()
+
+        query_check = '''
+        select id from public.image
+         where post_id = %(post_id)s
+           and url = %(url)s
+        '''
+
+        query_insert = '''
+        insert into public.image (post_id, url, width, height, exif_camera_model, exif_focal_length,
+                                  exif_exposure_time, exif_date_time, exif_aperture_value, exif_iso)
+        values (%(post_id)s, %(url)s, %(width)s, %(height)s, %(exif_camera_model)s,
+                %(exif_focal_length)s, %(exif_exposure_time)s,
+                to_timestamp(%(exif_date_time)s, 'yyyy:mm:dd HH24:mi:ss'),
+                %(exif_aperture_value)s, %(exif_iso)s)
+        returning id
+        '''
+
+        cursor.execute(query_check, image)
+        result = cursor.fetchone()
+
+        if result is None:
+            cursor.execute(query_insert, image)
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0]
+        else:
+            cursor.close()
+            return result[0]
 
 
     def run(self, argv):
@@ -143,7 +258,7 @@ class App(CacheConsumer):
 
         for year in range(2006, 2018):
             for month in range(1, 13):
-                print('%s/%s' % (month, year))
+                logger.info('%s/%s' % (month, year))
 
                 page = self.get_document(self.url_template % locals())
                 if page is None:
@@ -155,9 +270,14 @@ class App(CacheConsumer):
 
                 for a_item in html.xpath('//a[@class="j-day-subject-link"]'):
                     posts_count += 1
+                    url = a_item.get('href')
+
                     logging.info('PROCESSING POST %s' % posts_count)
-                    logging.info('%s / %s' % (a_item.get('href'), a_item.text_content()))
-                    self.process_post(a_item.get('href'))
+                    logging.info('%s / %s' % (url, a_item.text_content()))
+
+                    self.process_post({'url': url, 'title': a_item.text_content()})
+
+        self.conn.close()
 
 
 if __name__ == '__main__':
