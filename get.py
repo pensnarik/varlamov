@@ -199,9 +199,12 @@ class App(CacheConsumer):
         if len(date_modified) > 0:
             post['date_modified'] = date_modified[0].text_content()
 
-        if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_modified']) is None:
+        if post['date_modified'] is not None and \
+           re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_modified']) is None:
             post['date_modified'] = None
-        if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_published']) is None:
+
+        if post['date_published'] is not None and \
+           re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_published']) is None:
             post['date_published'] = None
 
         post_id = self.save_post(post)
