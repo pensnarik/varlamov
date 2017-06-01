@@ -28,6 +28,7 @@ create table public.image
     id serial primary key,
     post_id integer not null references public.post(id),
     url text not null,
+    file_size integer,
     width integer,
     height integer,
     exif_camera_model text,
@@ -37,3 +38,7 @@ create table public.image
     exif_aperture_value text,
     exif_iso text
 );
+
+create unique index on image (post_id, url);
+
+comment on column public.image.file_size is 'File size in bytes';

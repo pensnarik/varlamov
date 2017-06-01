@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- encoding: utf-8 -*-
 
 import os
 import sys
@@ -121,9 +122,17 @@ class App(CacheConsumer):
 
     def process_image(self, post_id, url):
         def extract_tag(tags, tag_name):
-            if tags.get(tag_name) is None:
+            if tags.get(tag_name) is None or str(tags.get(tag_name)).strip() == '':
                 return None
             return str(tags.get(tag_name))
+
+        image_id = self.get_image_id(post_id, url)
+
+        # Если информация об изображении есть в базе данных,
+        # будем считать, что изображение обработано, - это ускоряет
+        # обработку призапуске после неожиданной остановки
+        if image_id is not None:
+            return True
 
         data = self.get_binary_file(url)
 
@@ -143,22 +152,23 @@ class App(CacheConsumer):
         fp.seek(0)
         try:
             tags = exifread.process_file(fp)
-        except UnicodeEncodeError:
-            logger.error('Could not extract EXIF tags: UnicodeEncodeError')
+        except (UnicodeEncodeError, TypeError) as e:
+            logger.error('Could not extract EXIF tags: %s' % str(e))
             tags = {}
 
-        logger.info('%s: %s' % (self.get_cached_filename(url),tags.keys()))
-        logger.info('%s' % tags.get('EXIF FocalLength'))
-        logger.info('%s' % tags.get('EXIF ExposureTime'))
-        logger.info('%s' % tags.get('EXIF DateTimeOriginal'))
+        # logger.info('%s: %s' % (self.get_cached_filename(url),tags.keys()))
+        # logger.info('%s' % tags.get('EXIF FocalLength'))
+        # logger.info('%s' % tags.get('EXIF ExposureTime'))
+        # logger.info('%s' % tags.get('EXIF DateTimeOriginal'))
 
         self.save_image({'post_id': post_id, 'url': url,
                          'width': image.size[0], 'height': image.size[1],
+                         'file_size': self.get_file_size(url),
                          'exif_camera_model': extract_tag(tags, 'Image Model'),
                          'exif_focal_length': extract_tag(tags, 'EXIF FocalLength'),
                          'exif_exposure_time': extract_tag(tags, 'EXIF ExposureTime'),
                          'exif_date_time': extract_tag(tags, 'EXIF DateTimeOriginal'),
-                         'exif_aperture_value': extract_tag(tags, 'EXIF ApertureValue'),
+                         'exif_aperture_value': extract_tag(tags, 'EXIF FNumber'),
                          'exif_iso': extract_tag(tags, 'EXIF ISOSpeedRatings')})
 
     def process_post(self, post):
@@ -181,7 +191,12 @@ class App(CacheConsumer):
         if len(date_published) > 0:
             post['date_published'] = date_published[0].text_content()
         else:
-            raise Exception('Could not find datePublished time tag')
+            date_created = html.xpath('//time[@itemprop="dateCreated"]')
+
+            if len(date_created) > 0:
+                date_published = date_created[0].text_content()
+            else:
+                raise Exception('Could not find datePublished time tag')
 
         date_modified = html.xpath('//time[@itemprop="dateModified"]')
 
@@ -230,29 +245,40 @@ class App(CacheConsumer):
             cursor.close()
             return result[0]
 
-    def save_image(self, image):
-        cursor = self.conn.cursor()
-
+    def get_image_id(self, post_id, url):
         query_check = '''
         select id from public.image
          where post_id = %(post_id)s
            and url = %(url)s
         '''
+        cursor = self.conn.cursor()
+        cursor.execute(query_check, locals())
+        result = cursor.fetchone()
+
+        if result is None:
+            cursor.close()
+            return None
+        else:
+            cursor.close()
+            return result[0]
+
+    def save_image(self, image):
+        cursor = self.conn.cursor()
 
         query_insert = '''
-        insert into public.image (post_id, url, width, height, exif_camera_model, exif_focal_length,
+        insert into public.image (post_id, url, width, height, file_size,
+                                  exif_camera_model, exif_focal_length,
                                   exif_exposure_time, exif_date_time, exif_aperture_value, exif_iso)
-        values (%(post_id)s, %(url)s, %(width)s, %(height)s, %(exif_camera_model)s,
-                %(exif_focal_length)s, %(exif_exposure_time)s,
+        values (%(post_id)s, %(url)s, %(width)s, %(height)s, %(file_size)s,
+                %(exif_camera_model)s, %(exif_focal_length)s, %(exif_exposure_time)s,
                 to_timestamp(%(exif_date_time)s, 'yyyy:mm:dd HH24:mi:ss'),
                 %(exif_aperture_value)s, %(exif_iso)s)
         returning id
         '''
 
-        cursor.execute(query_check, image)
-        result = cursor.fetchone()
+        image_id = self.get_image_id(image['post_id'], image['url'])
 
-        if result is None:
+        if image_id is None:
             cursor.execute(query_insert, image)
             result = cursor.fetchone()
             cursor.close()
