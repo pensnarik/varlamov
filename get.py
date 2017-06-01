@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 
 import os
+import re
 import sys
 import logging
 import hashlib
@@ -191,17 +192,17 @@ class App(CacheConsumer):
         if len(date_published) > 0:
             post['date_published'] = date_published[0].text_content()
         else:
-            date_created = html.xpath('//time[@itemprop="dateCreated"]')
-
-            if len(date_created) > 0:
-                date_published = date_created[0].text_content()
-            else:
-                raise Exception('Could not find datePublished time tag')
+            post['date_published'] = None
 
         date_modified = html.xpath('//time[@itemprop="dateModified"]')
 
         if len(date_modified) > 0:
             post['date_modified'] = date_modified[0].text_content()
+
+        if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_modified']) is None:
+            post['date_modified'] = None
+        if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_published']) is None:
+            post['date_published'] = None
 
         post_id = self.save_post(post)
 
