@@ -78,6 +78,11 @@ class App(object):
 
         os.system('dot -Tpng cameras.dot -o cameras.png')
 
+        with open('posts.dot', 'wt') as f:
+            f.write(self.render('select * from posts_stat', 'metric'))
+
+        os.system('dot -Tpng posts.dot -o posts.png')
+
 
         self.conn.close()
 
