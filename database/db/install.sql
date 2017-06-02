@@ -43,6 +43,7 @@ create unique index on image (post_id, url);
 
 comment on column public.image.file_size is 'File size in bytes';
 
+drop view if exists cameras_stat;
 create view cameras_stat as
 select exif_camera_model,
        sum(case when date_trunc('y', date_published) = '2008-01-01' then 1 else 0 end) as "2008",
@@ -58,9 +59,30 @@ select exif_camera_model,
        count(*) as "total"
   from image i
   join post p on p.id = i .post_id
+ where i.exif_camera_model is not null
+  group by 1
+  having count(*) >= 500
+  order by 1;
+
+create view iso_stat as
+select exif_iso,
+       sum(case when date_trunc('y', date_published) = '2008-01-01' then 1 else 0 end) as "2008",
+       sum(case when date_trunc('y', date_published) = '2009-01-01' then 1 else 0 end) as "2009",
+       sum(case when date_trunc('y', date_published) = '2010-01-01' then 1 else 0 end) as "2010",
+       sum(case when date_trunc('y', date_published) = '2011-01-01' then 1 else 0 end) as "2011",
+       sum(case when date_trunc('y', date_published) = '2012-01-01' then 1 else 0 end) as "2012",
+       sum(case when date_trunc('y', date_published) = '2013-01-01' then 1 else 0 end) as "2013",
+       sum(case when date_trunc('y', date_published) = '2014-01-01' then 1 else 0 end) as "2014",
+       sum(case when date_trunc('y', date_published) = '2015-01-01' then 1 else 0 end) as "2015",
+       sum(case when date_trunc('y', date_published) = '2016-01-01' then 1 else 0 end) as "2016",
+       sum(case when date_trunc('y', date_published) = '2017-01-01' then 1 else 0 end) as "2017",
+       count(*) as "total"
+  from image i
+  join post p on p.id = i .post_id
+ where i.exif_iso is not null
   group by 1
   having count(*) >= 100
-  order by 1;
+  order by exif_iso::integer;
 
 create view most_popular_dimensions as
 with data as (
