@@ -64,13 +64,13 @@ class CacheConsumer(object):
         with open('%s.error' % self.get_cached_filename(url), 'wt') as f:
             f.write(error)
 
-    def get_file(self, url, stream=False):
+    def get_file(self, url, stream=False, force_download=False):
         logger.info('Getting file: %s' % url)
 
         if self.is_in_cache_error(url):
             return None
 
-        if self.is_in_cache(url):
+        if self.is_in_cache(url) and force_download == False:
             return open(self.get_cached_filename(url)).read()
         else:
             try:
@@ -102,11 +102,11 @@ class CacheConsumer(object):
                 self.save_error_in_cache('InvalidHTTPStatusCode: %s' % result.status_code)
                 return None
 
-    def get_document(self, url):
-        return self.get_file(url, stream=False)
+    def get_document(self, url, force_download=False):
+        return self.get_file(url, stream=False, force_download=force_download)
 
-    def get_binary_file(self, url):
-        return self.get_file(url, stream=True)
+    def get_binary_file(self, url, force_download=False):
+        return self.get_file(url, stream=True, force_download=force_download)
 
 class App(CacheConsumer):
 
@@ -122,6 +122,9 @@ class App(CacheConsumer):
         parser = argparse.ArgumentParser(description='Generate SQL statemets to create '
                                                      'attribute tables.')
         parser.add_argument('--post', type=str, help='Post to parse')
+        parser.add_argument('--from-year', type=int, help='Year to start parse from', default=2006)
+        parser.add_argument('--from-month', type=int, help='Month to start parse from', default=1)
+        parser.add_argument('--update', action='store_true', default=False, help='Do not use cache to construct post list')
         self.args = parser.parse_args()
 
 
@@ -239,6 +242,8 @@ class App(CacheConsumer):
 
         if len(date_modified) > 0:
             post['date_modified'] = date_modified[0].text_content()
+        else:
+            post['date_modified'] = None
 
         post['date_modified'] = self.get_date(post['date_modified'])
         post['date_published'] = self.get_date(post['date_published'])
@@ -339,11 +344,11 @@ class App(CacheConsumer):
     def extract_posts_from_range(self):
         posts_count = 0
 
-        for year in range(2006, 2018):
-            for month in range(1, 13):
+        for year in range(self.args.from_year, 2018):
+            for month in range(self.args.from_month, 13):
                 logger.info('%s/%s' % (month, year))
 
-                page = self.get_document(self.url_template % locals())
+                page = self.get_document(self.url_template % locals(), force_download=self.args.update)
                 if page is None:
                     continue
 
