@@ -84,6 +84,22 @@ select exif_iso,
   having count(*) >= 100
   order by exif_iso::integer;
 
+drop view if exists posts_stat;
+create view posts_stat as
+select 'Posts count' as metric,
+       sum(case when date_trunc('y', date_published) = '2008-01-01' then 1 else 0 end) as "2008",
+       sum(case when date_trunc('y', date_published) = '2009-01-01' then 1 else 0 end) as "2009",
+       sum(case when date_trunc('y', date_published) = '2010-01-01' then 1 else 0 end) as "2010",
+       sum(case when date_trunc('y', date_published) = '2011-01-01' then 1 else 0 end) as "2011",
+       sum(case when date_trunc('y', date_published) = '2012-01-01' then 1 else 0 end) as "2012",
+       sum(case when date_trunc('y', date_published) = '2013-01-01' then 1 else 0 end) as "2013",
+       sum(case when date_trunc('y', date_published) = '2014-01-01' then 1 else 0 end) as "2014",
+       sum(case when date_trunc('y', date_published) = '2015-01-01' then 1 else 0 end) as "2015",
+       sum(case when date_trunc('y', date_published) = '2016-01-01' then 1 else 0 end) as "2016",
+       sum(case when date_trunc('y', date_published) = '2017-01-01' then 1 else 0 end) as "2017"
+from post group by 1 order by 1;
+
+drop view if exists most_popular_dimensions;
 create view most_popular_dimensions as
 with data as (
     select date_trunc('y', date_published) as date_published,
@@ -100,4 +116,4 @@ sorted_data as (
     order by 1, 4
 ) select *
     from sorted_data
-   where "row_number" < 3;
+   where "row_number" = 1;
