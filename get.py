@@ -8,6 +8,7 @@ import logging
 import hashlib
 import shutil
 import psycopg2
+import argparse
 
 import requests
 from lxml.html import fromstring
@@ -118,6 +119,12 @@ class App(CacheConsumer):
 
         super(App, self).__init__()
 
+        parser = argparse.ArgumentParser(description='Generate SQL statemets to create '
+                                                     'attribute tables.')
+        parser.add_argument('--post', type=str, help='Post to parse')
+        self.args = parser.parse_args()
+
+
         self.conn = psycopg2.connect('postgresql://postgres@127.0.0.1:20000/database')
         self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
 
@@ -172,6 +179,30 @@ class App(CacheConsumer):
                          'exif_aperture_value': extract_tag(tags, 'EXIF FNumber'),
                          'exif_iso': extract_tag(tags, 'EXIF ISOSpeedRatings')})
 
+    def get_date(self, date_as_string):
+        month_mapping = {u'января': 1, u'февраля': 2, u'марта': 3, u'апреля': 4, u'мая': 5,
+                         u'июня': 6, u'июля': 7, u'августа': 8, u'сентября': 9, u'октября': 10,
+                         u'ноября': 11, u'декабря': 12}
+
+        if date_as_string is None:
+            return None
+        logger.info(type(date_as_string))
+        if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', date_as_string):
+            return date_as_string
+        if ',' in date_as_string:
+            # Попробуем интерпретировать дату как русскую дату
+            date_parts = date_as_string.split(',')
+
+            day_parts = date_parts[0].split(' ')
+
+            if day_parts[1] not in month_mapping.keys():
+                return None
+
+            return '%s-%02d-%02dT%sZ' % (day_parts[2], month_mapping[day_parts[1]], int(day_parts[0]),
+                                         date_parts[1].strip())
+        else:
+            return None
+
     def process_post(self, post):
         page = self.get_document(post['url'])
 
@@ -187,25 +218,31 @@ class App(CacheConsumer):
 
         # print (etree.tostring(content[0], pretty_print=True, encoding='unicode'))
 
+        title = html.xpath('//title')
+
+        if len(title) > 0:
+            post['title'] = title[0].text_content()
+        else:
+            raise Exception('Could not find title')
+
         date_published = html.xpath('//time[@itemprop="datePublished"]')
 
         if len(date_published) > 0:
             post['date_published'] = date_published[0].text_content()
         else:
-            post['date_published'] = None
+            date_published = html.xpath('//time[@itemprop="dateCreated"]')
+            if len(date_published) > 0:
+                post['date_published'] = date_published[0].text_content()
+            else:
+                post['date_published'] = None
 
         date_modified = html.xpath('//time[@itemprop="dateModified"]')
 
         if len(date_modified) > 0:
             post['date_modified'] = date_modified[0].text_content()
 
-        if post['date_modified'] is not None and \
-           re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_modified']) is None:
-            post['date_modified'] = None
-
-        if post['date_published'] is not None and \
-           re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', post['date_published']) is None:
-            post['date_published'] = None
+        post['date_modified'] = self.get_date(post['date_modified'])
+        post['date_published'] = self.get_date(post['date_published'])
 
         post_id = self.save_post(post)
 
@@ -237,6 +274,13 @@ class App(CacheConsumer):
         returning id
         '''
 
+        query_update = '''
+        update post
+           set date_modified = %(date_modified)s,
+               date_published = %(date_published)s
+         where id = %(id)s
+        '''
+
         cursor.execute(query_check, post)
         result = cursor.fetchone()
 
@@ -246,6 +290,8 @@ class App(CacheConsumer):
             cursor.close()
             return result[0]
         else:
+            post.update({'id': result[0]})
+            cursor.execute(query_update, post)
             cursor.close()
             return result[0]
 
@@ -291,10 +337,7 @@ class App(CacheConsumer):
             cursor.close()
             return result[0]
 
-
-    def run(self, argv):
-        posts_count = 0
-
+    def extract_posts_from_range(self):
         for year in range(2006, 2018):
             for month in range(1, 13):
                 logger.info('%s/%s' % (month, year))
@@ -320,7 +363,18 @@ class App(CacheConsumer):
                     logging.info('PROCESSING POST %s' % posts_count)
                     logging.info('%s / %s' % (url, a_item.text_content()))
 
-                    self.process_post({'url': url, 'title': a_item.text_content()})
+                    try:
+                        self.process_post({'url': url})
+                    except Exception as e:
+                        logger.error('Could not parse post: %s' % str(e))
+
+    def run(self, argv):
+        posts_count = 0
+
+        if self.args.post is not None:
+            self.process_post({'url': self.args.post})
+        else:
+            self.extract_posts_from_range()
 
         self.conn.close()
 
