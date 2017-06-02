@@ -18,95 +18,10 @@ from PIL.ExifTags import TAGS
 from requests.packages.urllib3.exceptions import ReadTimeoutError
 import exifread
 
+from mutex.cache import CacheConsumer
+
 logger = logging.getLogger('history')
 
-class CacheConsumer(object):
-
-    def get_cache_path(self):
-        return os.path.join(os.path.dirname(sys.argv[0]), 'cache')
-
-    def __init__(self):
-        logger.info('CacheConsumer() initialization, path = %s' % self.get_cache_path())
-        if not os.path.isdir(self.get_cache_path()):
-            os.mkdir(self.get_cache_path())
-
-        for i in range(0,16):
-            if not os.path.isdir(os.path.join(self.get_cache_path(), '%x' % i)):
-                os.mkdir(os.path.join(self.get_cache_path(), '%x' % i))
-
-            for j in range(0,16):
-                if not os.path.isdir(os.path.join(self.get_cache_path(), '%x' % i, '%x%x' % (i,j))):
-                    os.mkdir(os.path.join(self.get_cache_path(), '%x' % i, '%x%x' % (i,j)))
-
-    def get_cached_filename(self, url):
-        hash = hashlib.md5(url).hexdigest()
-        return os.path.join(self.get_cache_path(), hash[0], hash[0:2], hash)
-
-    def get_cached_filename_compat(self, url):
-        hash = hashlib.md5(url).hexdigest()
-        return os.path.join(self.get_cache_path(), hash[0:2], hash)
-
-    def get_file_size(self, url):
-        statinfo = os.stat(self.get_cached_filename(url))
-        return statinfo.st_size
-
-    def is_in_cache(self, url):
-        if os.path.exists(self.get_cached_filename_compat(url)):
-            os.rename(self.get_cached_filename_compat(url), self.get_cached_filename(url))
-            return self.get_file_size(url) > 0
-
-        return os.path.exists(self.get_cached_filename(url)) and self.get_file_size(url) > 0
-
-    def is_in_cache_error(self, url):
-        return os.path.exists('%s.error' % self.get_cached_filename(url))
-
-    def save_error_in_cache(self, url, error='ERROR'):
-        with open('%s.error' % self.get_cached_filename(url), 'wt') as f:
-            f.write(error)
-
-    def get_file(self, url, stream=False, force_download=False):
-        logger.info('Getting file: %s' % url)
-
-        if self.is_in_cache_error(url):
-            return None
-
-        if self.is_in_cache(url) and force_download == False:
-            return open(self.get_cached_filename(url)).read()
-        else:
-            try:
-                result = requests.get(url, stream=stream, timeout=10)
-            except Exception as e:
-                logger.error('Could not get file %s: %s' % (url, str(e)))
-                self.save_error_in_cache(url, 'DownloadException')
-                return None
-
-            if result.status_code == 200:
-                if stream == True:
-                    try:
-                        with open(self.get_cached_filename(url), 'wb') as f:
-                            result.raw.decode_content = True
-                            shutil.copyfileobj(result.raw, f)
-                        return open(self.get_cached_filename(url)).read()
-                    except ReadTimeoutError as e:
-                        logger.error('Exception while reading data: %s' % str(e))
-                        os.remove(self.get_cached_filename(url))
-                        self.save_error_in_cache('ReadTimeoutError')
-                        return None
-                else:
-                    logger.info(result.encoding)
-                    f = open(self.get_cached_filename(url), 'w')
-                    f.write(result.content)
-                    f.close()
-                    return result.text
-            else:
-                self.save_error_in_cache('InvalidHTTPStatusCode: %s' % result.status_code)
-                return None
-
-    def get_document(self, url, force_download=False):
-        return self.get_file(url, stream=False, force_download=force_download)
-
-    def get_binary_file(self, url, force_download=False):
-        return self.get_file(url, stream=True, force_download=force_download)
 
 class App(CacheConsumer):
 
@@ -166,11 +81,6 @@ class App(CacheConsumer):
         except (UnicodeEncodeError, TypeError) as e:
             logger.error('Could not extract EXIF tags: %s' % str(e))
             tags = {}
-
-        # logger.info('%s: %s' % (self.get_cached_filename(url),tags.keys()))
-        # logger.info('%s' % tags.get('EXIF FocalLength'))
-        # logger.info('%s' % tags.get('EXIF ExposureTime'))
-        # logger.info('%s' % tags.get('EXIF DateTimeOriginal'))
 
         self.save_image({'post_id': post_id, 'url': url,
                          'width': image.size[0], 'height': image.size[1],
