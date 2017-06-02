@@ -354,8 +354,6 @@ class App(CacheConsumer):
 
                 html = fromstring(page)
 
-                logger.info('Searching')
-
                 for a_item in html.xpath('//a[@class="j-day-subject-link"]'):
                     posts_count += 1
                     url = a_item.get('href')

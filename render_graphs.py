@@ -68,21 +68,24 @@ class App(object):
 
     def run(self, argv):
 
-        with open('iso.dot', 'wt') as f:
+        with open('./graph/iso.dot', 'wt') as f:
             f.write(self.render('select * from iso_stat', 'exif_iso'))
 
-        os.system('dot -Tpng iso.dot -o iso.png')
+        os.system('dot -Tpng ./graph/iso.dot -o ./graph/iso.png')
 
-        with open('cameras.dot', 'wt') as f:
+        with open('./graph/cameras.dot', 'wt') as f:
             f.write(self.render('select * from cameras_stat', 'exif_camera_model'))
 
-        os.system('dot -Tpng cameras.dot -o cameras.png')
+        os.system('dot -Tpng ./graph/cameras.dot -o ./graph/cameras.png')
 
-        with open('posts.dot', 'wt') as f:
+        with open('./graph/posts.dot', 'wt') as f:
             f.write(self.render('select * from posts_stat', 'metric'))
 
-        os.system('dot -Tpng posts.dot -o posts.png')
+        os.system('dot -Tpng ./graph/posts.dot -o ./graph/posts.png')
 
+        os.remove('./graph/iso.dot')
+        os.remove('./graph/cameras.dot')
+        os.remove('./graph/posts.dot')
 
         self.conn.close()
 
