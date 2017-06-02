@@ -338,6 +338,8 @@ class App(CacheConsumer):
             return result[0]
 
     def extract_posts_from_range(self):
+        posts_count = 0
+
         for year in range(2006, 2018):
             for month in range(1, 13):
                 logger.info('%s/%s' % (month, year))
@@ -369,7 +371,6 @@ class App(CacheConsumer):
                         logger.error('Could not parse post: %s' % str(e))
 
     def run(self, argv):
-        posts_count = 0
 
         if self.args.post is not None:
             self.process_post({'url': self.args.post})
