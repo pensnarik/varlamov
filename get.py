@@ -186,7 +186,6 @@ class App(CacheConsumer):
 
         if date_as_string is None:
             return None
-        logger.info(type(date_as_string))
         if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', date_as_string):
             return date_as_string
         if ',' in date_as_string:
