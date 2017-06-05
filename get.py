@@ -15,7 +15,6 @@ from lxml.html import fromstring
 from lxml import etree
 from PIL import Image
 from PIL.ExifTags import TAGS
-from requests.packages.urllib3.exceptions import ReadTimeoutError
 import exifread
 
 from mutex.cache import CacheConsumer
