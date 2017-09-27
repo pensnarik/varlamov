@@ -79,21 +79,23 @@ class App(CacheConsumer):
             logger.error('Could not extract EXIF tags: %s' % str(e))
             tags = {}
 
-        logger.info('Image tags: %s' % tags)
+        image_object = {'post_id': post_id, 'url': url,
+                        'width': image.size[0], 'height': image.size[1],
+                        'file_size': self.get_file_size(url),
+                        'exif_camera_model': extract_tag(tags, 'Image Model'),
+                        'exif_focal_length': extract_tag(tags, 'EXIF FocalLength'),
+                        'exif_exposure_time': extract_tag(tags, 'EXIF ExposureTime'),
+                        'exif_date_time': extract_tag(tags, 'EXIF DateTimeOriginal'),
+                        'exif_aperture_value': extract_tag(tags, 'EXIF FNumber'),
+                        'exif_iso': extract_tag(tags, 'EXIF ISOSpeedRatings')}
+
+        logger.info('Image: %s' % image_object)
 
         # --image <image_url>, - process and exit
         if post_id is None:
             return
 
-        self.save_image({'post_id': post_id, 'url': url,
-                         'width': image.size[0], 'height': image.size[1],
-                         'file_size': self.get_file_size(url),
-                         'exif_camera_model': extract_tag(tags, 'Image Model'),
-                         'exif_focal_length': extract_tag(tags, 'EXIF FocalLength'),
-                         'exif_exposure_time': extract_tag(tags, 'EXIF ExposureTime'),
-                         'exif_date_time': extract_tag(tags, 'EXIF DateTimeOriginal'),
-                         'exif_aperture_value': extract_tag(tags, 'EXIF FNumber'),
-                         'exif_iso': extract_tag(tags, 'EXIF ISOSpeedRatings')})
+        self.save_image(image_object)
 
     def get_date(self, date_as_string):
         month_mapping = {u'января': 1, u'февраля': 2, u'марта': 3, u'апреля': 4, u'мая': 5,
