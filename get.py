@@ -5,8 +5,6 @@ import os
 import re
 import sys
 import logging
-import hashlib
-import shutil
 import psycopg2
 import argparse
 
@@ -14,7 +12,6 @@ import requests
 from lxml.html import fromstring
 from lxml import etree
 from PIL import Image
-from PIL.ExifTags import TAGS
 import exifread
 
 from mutex.cache import CacheConsumer
