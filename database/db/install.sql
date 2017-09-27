@@ -4,8 +4,6 @@ create database :database;
 
 \connect :database
 
-create extension plpythonu;
-
 /* Write your SQL code here. You may include scripts from directories "data" and "schema"
 
    CREATE TABLE test (id serial, value text);
