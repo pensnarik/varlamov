@@ -68,6 +68,9 @@ class App(object):
 
     def run(self, argv):
 
+        if not os.path.exists('./graph'):
+            os.mkdir('./graph')
+
         with open('./graph/iso.dot', 'wt') as f:
             f.write(self.render('select * from iso_stat', 'exif_iso'))
 
