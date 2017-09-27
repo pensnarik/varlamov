@@ -21,7 +21,6 @@ from mutex.cache import CacheConsumer
 
 logger = logging.getLogger('history')
 
-
 class App(CacheConsumer):
 
     url_template = 'http://varlamov.ru/%(year)s/%(month)02d'
@@ -30,6 +29,7 @@ class App(CacheConsumer):
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                             level=logging.INFO, stream=sys.stdout)
         logger.setLevel(logging.INFO)
+        logging.getLogger('cache').setLevel(logging.INFO)
 
         super(App, self).__init__()
 
