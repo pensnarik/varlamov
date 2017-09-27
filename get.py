@@ -38,10 +38,10 @@ class App(CacheConsumer):
         parser.add_argument('--from-year', type=int, help='Year to start parse from', default=2006)
         parser.add_argument('--from-month', type=int, help='Month to start parse from', default=1)
         parser.add_argument('--update', action='store_true', default=False, help='Do not use cache to construct post list')
+        parser.add_argument('--db', type=str, help='Database DSN', default='postgresql://postgres@127.0.0.1:20000/database')
         self.args = parser.parse_args()
 
-
-        self.conn = psycopg2.connect('postgresql://postgres@127.0.0.1:20000/database')
+        self.conn = psycopg2.connect(self.args.db)
         self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
 
     def process_image(self, post_id, url):
