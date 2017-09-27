@@ -36,6 +36,7 @@ class App(CacheConsumer):
         parser.add_argument('--from-month', type=int, help='Month to start parse from', default=1)
         parser.add_argument('--update', action='store_true', default=False, help='Do not use cache to construct post list')
         parser.add_argument('--db', type=str, help='Database DSN', default='postgresql://postgres@127.0.0.1:20000/database')
+        parser.add_argument('--image', type=str, help='Process one image and exit')
         self.args = parser.parse_args()
 
         self.conn = psycopg2.connect(self.args.db)
@@ -47,13 +48,14 @@ class App(CacheConsumer):
                 return None
             return str(tags.get(tag_name))
 
-        image_id = self.get_image_id(post_id, url)
+        if post_id is not None:
+            image_id = self.get_image_id(post_id, url)
 
-        # Если информация об изображении есть в базе данных,
-        # будем считать, что изображение обработано, - это ускоряет
-        # обработку призапуске после неожиданной остановки
-        if image_id is not None:
-            return True
+            # Если информация об изображении есть в базе данных,
+            # будем считать, что изображение обработано, - это ускоряет
+            # обработку призапуске после неожиданной остановки
+            if image_id is not None:
+                return True
 
         data = self.get_binary_file(url)
 
@@ -76,6 +78,12 @@ class App(CacheConsumer):
         except (UnicodeEncodeError, TypeError) as e:
             logger.error('Could not extract EXIF tags: %s' % str(e))
             tags = {}
+
+        logger.info('Image tags: %s' % tags)
+
+        # --image <image_url>, - process and exit
+        if post_id is None:
+            return
 
         self.save_image({'post_id': post_id, 'url': url,
                          'width': image.size[0], 'height': image.size[1],
@@ -272,6 +280,8 @@ class App(CacheConsumer):
 
         if self.args.post is not None:
             self.process_post({'url': self.args.post})
+        elif self.args.image is not None:
+            self.process_image(None, self.args.image)
         else:
             self.extract_posts_from_range()
 
