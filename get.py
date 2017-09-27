@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
 import os
@@ -33,8 +33,7 @@ class App(CacheConsumer):
 
         super(App, self).__init__()
 
-        parser = argparse.ArgumentParser(description='Generate SQL statemets to create '
-                                                     'attribute tables.')
+        parser = argparse.ArgumentParser(description='varlamov.ru parser')
         parser.add_argument('--post', type=str, help='Post to parse')
         parser.add_argument('--from-year', type=int, help='Year to start parse from', default=2006)
         parser.add_argument('--from-month', type=int, help='Month to start parse from', default=1)
@@ -165,12 +164,6 @@ class App(CacheConsumer):
             if url is None or url.endswith('.ico') or url.endswith('.svg') or url.endswith('.gif'):
                 continue
 
-            try:
-                url.decode('ascii')
-            except UnicodeEncodeError:
-                logger.error('Invalid ASCII symbol in URL, skipping')
-                continue
-
             logger.info(url)
             self.process_image(post_id, url)
 
@@ -266,12 +259,6 @@ class App(CacheConsumer):
                 for a_item in html.xpath('//a[@class="j-day-subject-link"]'):
                     posts_count += 1
                     url = a_item.get('href')
-
-                    try:
-                        url.decode('ascii')
-                    except UnicodeEncodeError:
-                        logger.info('Non ASCII symbol in URL, skipping...')
-                        continue
 
                     logging.info('PROCESSING POST %s' % posts_count)
                     logging.info('%s / %s' % (url, a_item.text_content()))
