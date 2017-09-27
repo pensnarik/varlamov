@@ -161,6 +161,9 @@ class App(CacheConsumer):
         for img in content[0].xpath('.//img'):
             url = img.get('src')
 
+            if url.startswith('//'):
+                url = 'http:%s' % url
+
             if url is None or url.endswith('.ico') or url.endswith('.svg') or url.endswith('.gif'):
                 continue
 
