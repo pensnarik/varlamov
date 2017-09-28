@@ -133,12 +133,10 @@ class App(CacheConsumer):
         if len(content) < 1:
             return False
 
-        # print (etree.tostring(content[0], pretty_print=True, encoding='unicode'))
-
-        title = html.xpath('//title')
+        title = html.xpath('//meta[@property="og:title"]')
 
         if len(title) > 0:
-            post['title'] = title[0].text_content()
+            post['title'] = title[0].get('content')
         else:
             raise Exception('Could not find title')
 
