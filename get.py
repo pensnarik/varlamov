@@ -120,6 +120,12 @@ class App(CacheConsumer):
         else:
             return None
 
+    def extract_tags(self, html):
+        result = list()
+        for meta in html.xpath('//meta[@property="article:tag"]'):
+            result.append(meta.get('content'))
+        return result
+
     def process_post(self, post):
         page = self.get_document(post['url'])
 
@@ -160,6 +166,9 @@ class App(CacheConsumer):
 
         post['date_modified'] = self.get_date(post['date_modified'])
         post['date_published'] = self.get_date(post['date_published'])
+        post['tags'] = self.extract_tags(html)
+
+        logger.info('Tags: %s' % post['tags'])
 
         post_id = self.save_post(post)
 
@@ -183,15 +192,17 @@ class App(CacheConsumer):
         '''
 
         query_insert = '''
-        insert into public.post (url, title, date_published, date_modified)
-        values (%(url)s, %(title)s, %(date_published)s, %(date_modified)s)
+        insert into public.post (url, title, date_published, date_modified, tags)
+        values (%(url)s, %(title)s, %(date_published)s, %(date_modified)s, %(tags)s)
         returning id
         '''
 
         query_update = '''
         update post
-           set date_modified = %(date_modified)s,
-               date_published = %(date_published)s
+           set title = %(title)s,
+               date_modified = %(date_modified)s,
+               date_published = %(date_published)s,
+               tags = %(tags)s
          where id = %(id)s
         '''
 
@@ -204,6 +215,7 @@ class App(CacheConsumer):
             cursor.close()
             return result[0]
         else:
+            logger.info('Post exists, id = %s, updating...' % result[0])
             post.update({'id': result[0]})
             cursor.execute(query_update, post)
             cursor.close()

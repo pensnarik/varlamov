@@ -18,7 +18,8 @@ create table public.post
     url text not null unique,
     title text,
     date_published timestamptz,
-    date_modified timestamptz
+    date_modified timestamptz,
+    tags text[]
 );
 
 create table public.image
