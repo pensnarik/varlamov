@@ -2,6 +2,7 @@
 
 import os
 import sys
+import argparse
 import psycopg2, psycopg2.extras
 
 class App(object):
@@ -9,7 +10,11 @@ class App(object):
     year_range = (2008, 2018,)
 
     def __init__(self):
-        self.conn = psycopg2.connect('postgresql://postgres@127.0.0.1:20000/database')
+        parser = argparse.ArgumentParser(description='varlamov.ru graphs generator')
+        parser.add_argument('--db', type=str, help='Database DSN', default='postgresql://postgres@127.0.0.1:20000/database')
+
+        self.args = parser.parse_args()
+        self.conn = psycopg2.connect(self.args.db)
 
     def get_maximum(self, data):
         max = 0
