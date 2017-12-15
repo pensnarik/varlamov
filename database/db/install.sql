@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP 1
 
-create database :database;
+create database :database owner :user;
 
 \connect :database
 
@@ -22,6 +22,9 @@ create table public.post
     tags text[]
 );
 
+grant select, insert, update, delete on public.post to :user;
+grant select, usage on sequence public.post_id_seq to :user;
+
 create table public.image
 (
     id serial primary key,
@@ -37,6 +40,9 @@ create table public.image
     exif_aperture_value text,
     exif_iso text
 );
+
+grant select, insert, update, delete on public.image to :user;
+grant select, usage on sequence public.image_id_seq to :user;
 
 create unique index on image (post_id, url);
 
@@ -116,3 +122,49 @@ sorted_data as (
 ) select *
     from sorted_data
    where "row_number" = 1;
+
+/* Самые популярные теги за всё время */
+
+with
+raw_tags as (
+  select unnest(tags) tag, to_char(date_published, 'yyyy') as year
+    from post
+),
+all_tags as (
+  select tag, year, count(*),
+         rank() over(partition by year order by count(*) desc)
+    from raw_tags
+   where tag != 'p-news'
+    group by 1, 2
+),
+top_tags as (
+  select * from all_tags where "rank" <= 5 order by 2, 4
+),
+uniq_tags as (
+  select distinct tag from top_tags
+),
+uniq_years as (
+  select distinct year from top_tags
+),
+flat_table as (
+select ut.tag,
+       uy.year,
+       coalesce("count", 0) as tags_count,
+       t."rank"
+  from uniq_tags ut
+  join uniq_years uy on true
+  left join top_tags t on t.tag = ut.tag and t.year = uy.year
+)
+select tag,
+       sum(case when year = '2008' then tags_count else 0 end) as "2008",
+       sum(case when year = '2009' then tags_count else 0 end) as "2009",
+       sum(case when year = '2010' then tags_count else 0 end) as "2010",
+       sum(case when year = '2011' then tags_count else 0 end) as "2011",
+       sum(case when year = '2012' then tags_count else 0 end) as "2012",
+       sum(case when year = '2013' then tags_count else 0 end) as "2013",
+       sum(case when year = '2014' then tags_count else 0 end) as "2014",
+       sum(case when year = '2015' then tags_count else 0 end) as "2015",
+       sum(case when year = '2016' then tags_count else 0 end) as "2016",
+       sum(case when year = '2017' then tags_count else 0 end) as "2017"
+  from flat_table
+  group by 1;

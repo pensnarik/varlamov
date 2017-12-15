@@ -14,11 +14,14 @@ from lxml import etree
 from PIL import Image
 import exifread
 
-from mutex.cache import CacheConsumer
+from mutex.cache import FileCache
+from mutex.parsing import BasicParser, PageDownloadException
+from mutex.network import NetworkManager, PageNotFound
+from config import cache_path
 
 logger = logging.getLogger('history')
 
-class App(CacheConsumer):
+class App(BasicParser):
 
     url_template = 'http://varlamov.ru/%(year)s/%(month)02d'
 
@@ -30,17 +33,22 @@ class App(CacheConsumer):
 
         super(App, self).__init__()
 
-        parser = argparse.ArgumentParser(description='varlamov.ru parser')
-        parser.add_argument('--post', type=str, help='Post to parse')
-        parser.add_argument('--from-year', type=int, help='Year to start parse from', default=2006)
-        parser.add_argument('--from-month', type=int, help='Month to start parse from', default=1)
-        parser.add_argument('--update', action='store_true', default=False, help='Do not use cache to construct post list')
-        parser.add_argument('--db', type=str, help='Database DSN', default='postgresql://postgres@127.0.0.1:20000/database')
-        parser.add_argument('--image', type=str, help='Process one image and exit')
-        self.args = parser.parse_args()
+        self.parser.add_argument('--post', type=str, help='Post to parse')
+        self.parser.add_argument('--from-year', type=int, help='Year to start parse from', default=2006)
+        self.parser.add_argument('--from-month', type=int, help='Month to start parse from', default=1)
+        self.parser.add_argument('--update', action='store_true', default=False, help='Do not use cache to construct post list')
+        self.parser.add_argument('--db', type=str, help='Database DSN', default='postgresql://postgres@127.0.0.1:20000/database')
+        self.parser.add_argument('--image', type=str, help='Process one image and exit')
+        self.args = self.parser.parse_args()
+
+        self.net = NetworkManager()
+        self.cache = FileCache(path=cache_path, namespace='varlamov.ru')
 
         self.conn = psycopg2.connect(self.args.db)
         self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+
+    def get_sleep_time(self):
+        return 0
 
     def process_image(self, post_id, url):
         def extract_tag(tags, tag_name):
@@ -57,12 +65,12 @@ class App(CacheConsumer):
             if image_id is not None:
                 return True
 
-        data = self.get_binary_file(url)
+        data = self.get_page(url, binary=True)
 
         if data is None:
             return False
 
-        fp = open(self.get_cached_filename(url), 'rb')
+        fp = open(self.cache.get_cached_filename(url), 'rb')
 
         try:
             image = Image.open(fp)
@@ -81,7 +89,7 @@ class App(CacheConsumer):
 
         image_object = {'post_id': post_id, 'url': url,
                         'width': image.size[0], 'height': image.size[1],
-                        'file_size': self.get_file_size(url),
+                        'file_size': self.cache.get_file_size(url),
                         'exif_camera_model': extract_tag(tags, 'Image Model'),
                         'exif_focal_length': extract_tag(tags, 'EXIF FocalLength'),
                         'exif_exposure_time': extract_tag(tags, 'EXIF ExposureTime'),
@@ -127,7 +135,7 @@ class App(CacheConsumer):
         return result
 
     def process_post(self, post):
-        page = self.get_document(post['url'])
+        page = self.get_page(post['url'])
 
         if page is None:
             return False
@@ -270,7 +278,7 @@ class App(CacheConsumer):
             for month in range(self.args.from_month, 13):
                 logger.info('%s/%s' % (month, year))
 
-                page = self.get_document(self.url_template % locals(), force_download=self.args.update)
+                page = self.get_page(self.url_template % locals())
                 if page is None:
                     continue
 
@@ -285,8 +293,11 @@ class App(CacheConsumer):
 
                     try:
                         self.process_post({'url': url})
+                    except (PageDownloadException, PageNotFound):
+                        logger.error('Network error, continue')
                     except Exception as e:
                         logger.error('Could not parse post: %s' % str(e))
+                        raise
 
     def run(self, argv):
 
