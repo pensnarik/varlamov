@@ -17,7 +17,7 @@ import exifread
 from mutex.cache import FileCache
 from mutex.parsing import BasicParser, PageDownloadException
 from mutex.network import NetworkManager, PageNotFound
-from config import cache_path
+from config import cache_path, db
 
 logger = logging.getLogger('history')
 
@@ -37,7 +37,7 @@ class App(BasicParser):
         self.parser.add_argument('--from-year', type=int, help='Year to start parse from', default=2006)
         self.parser.add_argument('--from-month', type=int, help='Month to start parse from', default=1)
         self.parser.add_argument('--update', action='store_true', default=False, help='Do not use cache to construct post list')
-        self.parser.add_argument('--db', type=str, help='Database DSN', default='postgresql://postgres@127.0.0.1:20000/database')
+        self.parser.add_argument('--db', type=str, help='Database DSN', default=db)
         self.parser.add_argument('--image', type=str, help='Process one image and exit')
         self.args = self.parser.parse_args()
 
