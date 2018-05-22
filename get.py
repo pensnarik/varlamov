@@ -14,9 +14,9 @@ from lxml import etree
 from PIL import Image
 import exifread
 
-from mutex.cache import FileCache
-from mutex.parsing import BasicParser, PageDownloadException
-from mutex.network import NetworkManager, PageNotFound
+from parselab.cache import FileCache
+from parselab.parsing import BasicParser, PageDownloadException
+from parselab.network import NetworkManager, PageNotFound, InternalServerError
 from config import cache_path, db
 
 logger = logging.getLogger('history')
@@ -24,6 +24,9 @@ logger = logging.getLogger('history')
 class App(BasicParser):
 
     url_template = 'http://varlamov.ru/%(year)s/%(month)02d'
+
+    def is_captcha_required(self, data):
+        return False
 
     def __init__(self):
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -65,7 +68,10 @@ class App(BasicParser):
             if image_id is not None:
                 return True
 
-        data = self.get_page(url, binary=True)
+        try:
+            data = self.get_page(url, binary=True)
+        except InternalServerError:
+            return False
 
         if data is None:
             return False
