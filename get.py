@@ -9,6 +9,7 @@ import psycopg2
 import argparse
 
 import requests
+from requests.exceptions import InvalidSchema
 from lxml.html import fromstring
 from lxml import etree
 from PIL import Image
@@ -70,7 +71,7 @@ class App(BasicParser):
 
         try:
             data = self.get_page(url, binary=True)
-        except InternalServerError:
+        except (InternalServerError, InvalidSchema):
             return False
 
         if data is None:
