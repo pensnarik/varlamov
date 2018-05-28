@@ -7,6 +7,7 @@ import sys
 import logging
 import psycopg2
 import argparse
+import datetime
 
 import requests
 from requests.exceptions import InvalidSchema
@@ -54,11 +55,38 @@ class App(BasicParser):
     def get_sleep_time(self):
         return 0
 
+    def fix_url(self, url):
+        if url.startswith('http:/varlamov'):
+            return url.replace('http:/varlamov', 'http://varlamov')
+        if url.startswith('http:////'):
+            return url.replace('http:////', 'http://')
+        if url.startswith('http:///'):
+            return url.replace('http:///', 'http://')
+        return url
+
+    def is_date_valid(self, date):
+        accepted_formats = ['%Y-%m-%d %H:%M:%S', '%Y:%m:%d %H:%M:%S',
+                            '%Y-%m-%dT%H:%M:%S', '%Y:%m:%dT%H:%M:%S',
+                            '%Y-%m-%dT%H:%M:%SZ', '%Y:%m:%dT%H:%M:%SZ',
+                            '%Y-%m-%dT%H:%MZ']
+        for try_format in accepted_formats:
+            try:
+                d = datetime.datetime.strptime(date, try_format)
+                logger.info('Date %s is valid', date)
+                return True
+            except ValueError:
+                continue
+
+        logger.info('Date %s is NOT valid', date)
+        return False
+
     def process_image(self, post_id, url):
         def extract_tag(tags, tag_name):
             if tags.get(tag_name) is None or str(tags.get(tag_name)).strip() == '':
                 return None
             return str(tags.get(tag_name))
+
+        url = self.fix_url(url)
 
         if post_id is not None:
             image_id = self.get_image_id(post_id, url)
@@ -71,7 +99,7 @@ class App(BasicParser):
 
         try:
             data = self.get_page(url, binary=True)
-        except (InternalServerError, InvalidSchema):
+        except (InternalServerError, InvalidSchema, UnicodeError):
             return False
 
         if data is None:
@@ -106,6 +134,10 @@ class App(BasicParser):
 
         logger.info('Image: %s' % image_object)
 
+        if image_object['exif_date_time'] is not None and \
+            not self.is_date_valid(image_object['exif_date_time']):
+            image_object['exif_date_time'] = None
+
         # --image <image_url>, - process and exit
         if post_id is None:
             return
@@ -113,13 +145,15 @@ class App(BasicParser):
         self.save_image(image_object)
 
     def get_date(self, date_as_string):
+        logger.info('get_date(%s)', date_as_string)
         month_mapping = {u'января': 1, u'февраля': 2, u'марта': 3, u'апреля': 4, u'мая': 5,
                          u'июня': 6, u'июля': 7, u'августа': 8, u'сентября': 9, u'октября': 10,
                          u'ноября': 11, u'декабря': 12}
 
         if date_as_string is None:
             return None
-        if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', date_as_string):
+        if re.match('\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', date_as_string) and \
+            self.is_date_valid(date_as_string):
             return date_as_string
         if ',' in date_as_string:
             # Попробуем интерпретировать дату как русскую дату
@@ -130,8 +164,12 @@ class App(BasicParser):
             if day_parts[1] not in month_mapping.keys():
                 return None
 
-            return '%s-%02d-%02dT%sZ' % (day_parts[2], month_mapping[day_parts[1]], int(day_parts[0]),
-                                         date_parts[1].strip())
+            date_as_string = '%s-%02d-%02dT%sZ' % (day_parts[2], month_mapping[day_parts[1]],
+                                                   int(day_parts[0]), date_parts[1].strip())
+            if self.is_date_valid(date_as_string):
+                return date_as_string
+            else:
+                return None
         else:
             return None
 
@@ -142,6 +180,7 @@ class App(BasicParser):
         return result
 
     def process_post(self, post):
+        logger.info('Pricessing post in URL %s', post)
         page = self.get_page(post['url'])
 
         if page is None:
@@ -190,11 +229,14 @@ class App(BasicParser):
         for img in content[0].xpath('.//img'):
             url = img.get('src')
 
+            if url is None or url == '' or \
+               url.endswith('.ico') or \
+               url.endswith('.svg') or \
+               url.endswith('.gif'):
+                continue
+
             if url.startswith('//'):
                 url = 'http:%s' % url
-
-            if url is None or url.endswith('.ico') or url.endswith('.svg') or url.endswith('.gif'):
-                continue
 
             logger.info(url)
             self.process_image(post_id, url)
