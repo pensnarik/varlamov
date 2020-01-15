@@ -42,7 +42,6 @@ create unique index on image (post_id, url);
 
 comment on column public.image.file_size is 'File size in bytes';
 
-drop view if exists cameras_stat;
 create view cameras_stat as
 select exif_camera_model,
        sum(case when date_trunc('y', date_published) = '2008-01-01' then 1 else 0 end) as "2008",
@@ -55,6 +54,8 @@ select exif_camera_model,
        sum(case when date_trunc('y', date_published) = '2015-01-01' then 1 else 0 end) as "2015",
        sum(case when date_trunc('y', date_published) = '2016-01-01' then 1 else 0 end) as "2016",
        sum(case when date_trunc('y', date_published) = '2017-01-01' then 1 else 0 end) as "2017",
+       sum(case when date_trunc('y', date_published) = '2018-01-01' then 1 else 0 end) as "2018",
+       sum(case when date_trunc('y', date_published) = '2019-01-01' then 1 else 0 end) as "2019",
        count(*) as "total"
   from image i
   join post p on p.id = i .post_id
@@ -62,6 +63,8 @@ select exif_camera_model,
   group by 1
   having count(*) >= 500
   order by 1;
+
+grant select on cameras_stat to varlamov;
 
 create view iso_stat as
 select exif_iso,
@@ -75,6 +78,8 @@ select exif_iso,
        sum(case when date_trunc('y', date_published) = '2015-01-01' then 1 else 0 end) as "2015",
        sum(case when date_trunc('y', date_published) = '2016-01-01' then 1 else 0 end) as "2016",
        sum(case when date_trunc('y', date_published) = '2017-01-01' then 1 else 0 end) as "2017",
+       sum(case when date_trunc('y', date_published) = '2018-01-01' then 1 else 0 end) as "2018",
+       sum(case when date_trunc('y', date_published) = '2019-01-01' then 1 else 0 end) as "2019",
        count(*) as "total"
   from image i
   join post p on p.id = i .post_id
@@ -83,7 +88,8 @@ select exif_iso,
   having count(*) >= 100
   order by exif_iso::integer;
 
-drop view if exists posts_stat;
+grant select on iso_stat to varlamov;
+
 create view posts_stat as
 select 'Posts count' as metric,
        sum(case when date_trunc('y', date_published) = '2008-01-01' then 1 else 0 end) as "2008",
@@ -95,10 +101,13 @@ select 'Posts count' as metric,
        sum(case when date_trunc('y', date_published) = '2014-01-01' then 1 else 0 end) as "2014",
        sum(case when date_trunc('y', date_published) = '2015-01-01' then 1 else 0 end) as "2015",
        sum(case when date_trunc('y', date_published) = '2016-01-01' then 1 else 0 end) as "2016",
-       sum(case when date_trunc('y', date_published) = '2017-01-01' then 1 else 0 end) as "2017"
+       sum(case when date_trunc('y', date_published) = '2017-01-01' then 1 else 0 end) as "2017",
+       sum(case when date_trunc('y', date_published) = '2018-01-01' then 1 else 0 end) as "2018",
+       sum(case when date_trunc('y', date_published) = '2019-01-01' then 1 else 0 end) as "2019"
 from post group by 1 order by 1;
 
-drop view if exists most_popular_dimensions;
+grant select on posts_stat to varlamov;
+
 create view most_popular_dimensions as
 with data as (
     select date_trunc('y', date_published) as date_published,
@@ -116,6 +125,8 @@ sorted_data as (
 ) select *
     from sorted_data
    where "row_number" = 1;
+
+grant select on most_popular_dimensions to varlamov;
 
 /* Самые популярные теги за всё время */
 
@@ -159,6 +170,8 @@ select tag,
        sum(case when year = '2014' then tags_count else 0 end) as "2014",
        sum(case when year = '2015' then tags_count else 0 end) as "2015",
        sum(case when year = '2016' then tags_count else 0 end) as "2016",
-       sum(case when year = '2017' then tags_count else 0 end) as "2017"
+       sum(case when year = '2017' then tags_count else 0 end) as "2017",
+       sum(case when year = '2018' then tags_count else 0 end) as "2018",
+       sum(case when year = '2019' then tags_count else 0 end) as "2019"
   from flat_table
   group by 1;
