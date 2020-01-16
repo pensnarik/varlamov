@@ -1,2 +1,4 @@
 Pillow
 ExifRead
+parselab
+lxml
