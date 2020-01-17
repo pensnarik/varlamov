@@ -62,7 +62,7 @@ select exif_camera_model,
  where i.exif_camera_model is not null
   group by 1
   having count(*) >= 500
-  order by 1;
+  order by (select min(exif_date_time) from image where exif_camera_model = i.exif_camera_model);
 
 grant select on cameras_stat to varlamov;
 
