@@ -7,7 +7,7 @@ import psycopg2, psycopg2.extras
 
 class App(object):
 
-    year_range = (2008, 2018,)
+    year_range = (2008, 2020,)
 
     def __init__(self):
         parser = argparse.ArgumentParser(description='varlamov.ru graphs generator')

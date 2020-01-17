@@ -12,4 +12,4 @@ services:
     networks:
       - database
     ports:
-      - '20000:5432'
+      - '22000:5432'
