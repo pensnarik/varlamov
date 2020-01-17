@@ -322,7 +322,7 @@ class App(BasicParser):
     def extract_posts_from_range(self):
         posts_count = 0
 
-        for year in range(self.args.from_year, 2020):
+        for year in range(self.args.from_year, datetime.datetime.today().year + 1):
             for month in range(self.args.from_month, 13):
                 logger.info('%s/%s' % (month, year))
 
